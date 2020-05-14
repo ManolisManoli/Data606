@@ -1,0 +1,320 @@
+---
+title: "DATA 606 Data Project Proposal"
+author: "Manolis Manoli"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+
+## Introduction
+
+For the final project I will be using the worldbank data set for the sustainable development goals:
+https://datacatalog.worldbank.org/dataset/sustainable-development-goals
+
+The data source has 98,625 observations each of which is a combination of one of 263 countries/regions and 374 attributes.  
+We will use the below indicator for which most countries have data for most of the years in the data set (1990 - 2018) as a measure of wealth.
+
+GDP per capita, PPP (current international $)
+
+We will look at the education rate to investigate wether this is a predictor of GDP.
+
+This can guide decision making on a government level, which areas to focus on when trying to grow their economy (represented by GDP)
+
+The Data is collected by the worldbank for the tracking and achieving of their sustainable development goals.
+
+All variables will be of numerical type.
+
+The Scope of this data includes the whole world, however, for some combinations of attributes and contries, no information is available. The avalability of data for a maximum amount of contries will partially guide our choice of investigation.
+
+We will likely not be able to make any causality conclusions since the GDP and well-being of a country is driven by many different factors and a single factor will unlikly on a stand alone basis drive the GDP higher. 
+
+## Data Preparation
+
+We require the below libraries
+
+```{r loading-libraries, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(ggplot2)
+library(psych)
+library(dplyr)
+library(knitr)
+library(tidyr)
+```
+
+We downloaded the CSV  from the world bank website and uploaded it to my github.
+Below we create the path and read in the CSV:
+```{r set-Github-dir,eval=T}
+
+
+
+urlRemote  <- "https://raw.githubusercontent.com/"
+pathGithub <- "chilleundso/DATA606/master/FinalProject/"
+fileName   <- "SDGData.csv"
+countryfileName   <- "countryVSgroup.csv"
+
+
+SDGdata <- read.csv(paste0(urlRemote, pathGithub, fileName),header = TRUE, 'stringsAsFactors'=FALSE, na.strings=c(""))
+
+countrydata <- read.csv(paste0(urlRemote, pathGithub, countryfileName),header = TRUE, 'stringsAsFactors'=FALSE, na.strings=c(""))
+
+```
+
+we clean the headers and get rid of unnecessary columns
+
+```{r data-clean-up}
+names(SDGdata)[1:8]
+#we see 3 things we want to change in the data:
+
+#1) We wont need the country and indicator code so we remove them:
+SDGdata <- SDGdata[c(-2,-4)]
+
+#2) Country.Name header has some strange characters in the beginning which we remove:
+names(SDGdata)[1] <- substring(names(SDGdata[1]), 4)
+
+#3) We want to remove the X before the years in the columns starting at column 3:
+names(SDGdata)[3:ncol(SDGdata)] <- substring(names(SDGdata[3:ncol(SDGdata)]), 2)
+
+names(SDGdata)[1:6]
+```
+
+
+make all the data colums (with a year in the header) numeric:
+
+```{r make-numeric}
+for(rw in 3:ncol(SDGdata)){
+  SDGdata[,rw] <- as.numeric(SDGdata[,rw])
+}
+```
+
+We add an indicator wether something in the Country.Name column is a country or a region such as "OPEC" or "EU".
+
+```{r add-country-Y-N}
+SDGdatacountry <- merge(SDGdata, countrydata,"Country.Name")
+```
+
+We will focus on the data that contains only countries and no regions / country groupings
+
+```{r long-df}
+dflong_all <-  gather(SDGdatacountry ,"year","value",-c("Country.Name","Indicator.Name","country"))
+
+dflong <- filter (dflong_all, country == "Y")
+```
+
+
+
+
+## Relevant summary statistics 
+
+To get a feel for the data we can filter for either, a specific indicator, country or year:
+
+```{r}
+GDP_PPP <- dplyr::filter(SDGdata, Indicator.Name == "GDP, PPP (constant 2011 international $)")
+kable(head(GDP_PPP[,1:5]))
+
+Cyprus <- dplyr::filter(SDGdata, Country.Name == "Cyprus")
+kable(head(Cyprus[,1:5]))
+
+y2000 <- dplyr::select(SDGdata,1:2,"2000")
+kable(head(y2000))
+```
+
+Some summary statistics of the variable we intend to use:
+
+GDP PPP 2018 summary:
+```{r}
+GDP_PPP <- dplyr::filter(dflong, Indicator.Name == "GDP per capita, PPP (current international $)")
+GDP_PPP2018 <-filter(GDP_PPP,year == "2018")
+
+describe(GDP_PPP2018$value)
+```
+
+
+GDP PPP global development:
+```{r, warning=F}
+
+GDP_PPP_World <- dplyr::filter(dflong_all, Indicator.Name == "GDP per capita, PPP (current international $)")
+GDP_PPP_World <- dplyr::filter(GDP_PPP_World, Country.Name == "World")
+
+GDP_PPP_World$year <- as.numeric(GDP_PPP_World$year)
+GDP_PPP_World$value <- as.numeric(GDP_PPP_World$value)
+
+ggplot(GDP_PPP_World, aes(x=year, y=value)) +
+  geom_line() +
+  xlab("years") +
+  ylab("GDP per capita")
+
+```
+
+
+Primary completion rate, total (% of relevant age group) summary statistic:
+```{r}
+PrimEd <- dplyr::filter(SDGdata, Indicator.Name == "Primary completion rate, total (% of relevant age group)")
+PrimEd2018 <-PrimEd[,c(31)]
+
+describe(as.numeric(PrimEd2018))
+```
+
+
+Primary completion rate, total (% of relevant age group) global development:
+```{r, warning=F}
+PrimEdWorld <- dplyr::filter(PrimEd, Country.Name == "World")
+#PrimEdWorld_plotdata <- as.numeric(PrimEdWorld)
+PrimEdWorld_long <- PrimEdWorld %>% gather(year, value, -c(Indicator.Name, Country.Name))
+PrimEdWorld_graphdata <- data.frame(matrix(ncol = 2, nrow = 30))
+PrimEdWorld_graphdata[,1] <- as.numeric(PrimEdWorld_long[,3])
+PrimEdWorld_graphdata[,2] <- as.numeric(PrimEdWorld_long[,4])
+ggplot(PrimEdWorld_graphdata, aes(x=X1, y=X2)) +
+  geom_line() +
+  xlab("years") +
+  ylab("preprimary enrollment (unweighted average)")
+
+```
+
+## Inference
+
+
+As we can see both preprimary enrollement and the GDP per Capita have increase significantly from 1990 to 2018.
+We want to see if between each of the countries we can see a correlation between their respective education rates and GDPs
+
+```{r}
+GDP_PPP <- dplyr::filter(dflong, Indicator.Name == "GDP per capita, PPP (current international $)")
+GDP_PPP_2018 <- dplyr::filter(GDP_PPP, year == "2018")
+
+
+Primary <- dplyr::filter(dflong, Indicator.Name == "Primary completion rate, total (% of relevant age group)")
+Primary_2018 <- dplyr::filter(Primary, year == "2018")
+
+GDPvPrimanry <- merge(GDP_PPP_2018,Primary_2018,by="Country.Name")
+
+GDPvPrimanry <- GDPvPrimanry %>% filter(!is.na(value.x))  %>%
+                                  filter(!is.na(value.y)) 
+
+names(GDPvPrimanry)[5] <- "GDP.per.Cap"
+names(GDPvPrimanry)[9] <- "Prim.Comp"
+
+
+m_GDPvPrimanry <- lm(Prim.Comp ~ GDP.per.Cap, GDPvPrimanry)
+summary(m_GDPvPrimanry)
+
+```
+
+With a p-value of less than 1 percent we can clearly see that there is a statistically relevant correlation between the two data sets.
+However the adjusted R squared is only 10% which means that education only explains a small amount of the overall GDP of a country.
+
+```{r}
+
+
+ggplot(GDPvPrimanry, aes(x=  Prim.Comp, y= GDP.per.Cap )) + 
+                  geom_point() +
+                  geom_smooth(method='lm', formula= y  ~ x )
+
+ggplot(GDPvPrimanry, aes(x=  Prim.Comp, y= GDP.per.Cap )) + 
+                  geom_point() +
+                  geom_text(aes(label=Country.Name),hjust=0, vjust=-0.5) +
+                  geom_smooth(method='lm', formula= y  ~ x )
+```
+
+We will check wether the use of a linear model is justified here:
+
+```{r}
+plot(m_GDPvPrimanry$residuals ~ GDPvPrimanry$GDP.per.Cap)
+abline(h = 0, lty = 3)
+```
+
+We certainly see that there are more countries in the lower end of the per Capita GDP, however, the residuals show no big difference depending on the GDP
+
+```{r}
+
+hist(m_GDPvPrimanry$residuals)
+```
+
+The histogram shows somewhat of a left skew but can still be considered normal
+
+```{r}
+qqnorm(m_GDPvPrimanry$residuals)
+qqline(m_GDPvPrimanry$residuals)
+```
+
+The Q-Q plot divereges from the line on the lower left hand side of the graph but remains on the line throughout the center and the top right hand side of the graph.
+
+
+## Additional Analysis
+
+We analysed wether the primary education rate in 2018 and the GDP in 2018 were correlated. However, education is an investment in the future and I will therefore redo the above investigation and see if the 1990 education rate is also correlated with the 2018 GPD:
+
+
+
+```{r}
+GDP_PPP <- dplyr::filter(dflong, Indicator.Name == "GDP per capita, PPP (current international $)")
+GDP_PPP_2018 <- dplyr::filter(GDP_PPP, year == "2018")
+
+
+Primary <- dplyr::filter(dflong, Indicator.Name == "Primary completion rate, total (% of relevant age group)")
+Primary_2018 <- dplyr::filter(Primary, year == "1990")
+
+GDPvPrimanry <- merge(GDP_PPP_2018,Primary_2018,by="Country.Name")
+
+GDPvPrimanry <- GDPvPrimanry %>% filter(!is.na(value.x))  %>%
+                                  filter(!is.na(value.y)) 
+
+names(GDPvPrimanry)[5] <- "GDP.per.Cap"
+names(GDPvPrimanry)[9] <- "Prim.Comp"
+
+# GDPvPrimanry <- GDPvPrimanry %>% filter(!is.na(value.x))  %>%
+#                                   filter(!is.na(value.y))  
+# GDPvPrimanry <- filter(GDPvPrimanry, value.x>1e10)
+
+m_GDPvPrimanry <- lm(Prim.Comp ~ GDP.per.Cap, GDPvPrimanry)
+summary(m_GDPvPrimanry)
+```
+
+The p-value is far smaller than in our comparison of the two values from the same years so there seems to be a time delay factor. However, we also have to consider that the average primary school education rate in 2018 is much higher and more similar across the globe and therefore does not provide as much of a differentiating factor as it did in 1990.
+The adjusted R-squared shows a clear increase from 10% before to more than 20% showing that the education level of 1990 seems to have a far better predicive power than that of 2018 itself.
+
+
+```{r}
+
+ggplot(GDPvPrimanry, aes(x=  Prim.Comp, y= GDP.per.Cap )) + 
+                  geom_point() +
+                  geom_smooth(method='lm', formula= y  ~ x )
+
+ggplot(GDPvPrimanry, aes(x=  Prim.Comp, y= GDP.per.Cap )) + 
+                  geom_point() +
+                  geom_text(aes(label=Country.Name),hjust=0, vjust=-0.5) +
+                  geom_smooth(method='lm', formula= y  ~ x )
+```
+
+We will also here have a look at the validity of the model use
+
+```{r}
+plot(m_GDPvPrimanry$residuals ~ GDPvPrimanry$GDP.per.Cap)
+abline(h = 0, lty = 3)
+```
+
+There is a much more significant pattern in the residuals: the residuals for very small per capita GDP countries seem to be negative while the mid range has positive residuals with the higher GDP countries again having a negative residual.
+
+```{r}
+
+hist(m_GDPvPrimanry$residuals)
+```
+
+The histogram has a somewhat less pronounced peak with larger tails
+
+```{r}
+qqnorm(m_GDPvPrimanry$residuals)
+qqline(m_GDPvPrimanry$residuals)
+```
+
+The Q-Q plot seems to run quite closely along the diagonal.
+
+## Conclusion
+
+We can certainly see correlation between early childhood education and the wealth (GDP per capita) of a country. It is especially stricing that if we choose the education levels of roughly 3 decades prior to the measurement of the GDP, that the predictive power increases significantly. This could lead us to believe that the impact of education is only measurable in the wealth of a country with some delay. 
+
+We did, however, note that the primary completion rate was much more diverse and therefore potentially a better indicator simply since there was more difference between the countries in 1990 than there was in 2018.
+
+   
+   
+    
+
